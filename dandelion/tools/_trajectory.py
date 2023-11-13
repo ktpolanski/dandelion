@@ -13,6 +13,23 @@ from typing import List, Optional, Union
 from dandelion.utilities._utilities import bh, Literal
 
 
+def _filter_cells(
+    adata: AnnData,
+    col: str,
+    filter_pattern: Optional[str] = ",|None|No_contig",
+    remove_missing: bool = True,
+) -> AnnData:
+    # find filter pattern hits in our column of interest
+    mask = adata.obs[col].str.contains(filter_pattern)
+    if remove_missing:
+        # remove the cells
+        adata = adata[~mask].copy()
+    else:
+        # uniformly mask the filter pattern hits
+        adata.obs.loc[mask, col] = col + "_missing"
+    return adata
+
+
 def setup_vdj_pseudobulk(
     adata: AnnData,
     mode: Optional[Literal["B", "abT", "gdT"]] = "abT",
@@ -39,6 +56,7 @@ def setup_vdj_pseudobulk(
     ],
     check_extract_cols_mapping: Optional[List[str]] = None,
     filter_pattern: Optional[str] = ",|None|No_contig",
+    remove_missing: bool = True,
 ) -> AnnData:
     """Function for prepare anndata for computing pseudobulk vdj feature space.
 
@@ -74,6 +92,9 @@ def setup_vdj_pseudobulk(
         Specifying None will skip this step.
     filter_pattern : Optional[str], optional
         pattern to filter from object. If `None`, does not filter.
+    remove_missing : bool, optional
+        If True, will remove cells with contigs matching the filter from the object. If False, will mask them with a uniform
+        value dependent on the column name.
 
     Returns
     -------
@@ -172,52 +193,47 @@ def setup_vdj_pseudobulk(
         if mode is not None:
             if check_vdj_mapping is not None:
                 for col in check_vdj_mapping:
-                    adata = adata[
-                        ~(
-                            adata.obs[
-                                col + "_" + mode + "_VDJ_main"
-                            ].str.contains(filter_pattern)
-                        )
-                    ].copy()
+                    adata = _filter_cells(
+                        adata=adata,
+                        col=col + "_" + mode + "_VDJ_main",
+                        filter_pattern=filter_pattern,
+                        remove_missing=remove_missing,
+                    )
             if check_vj_mapping is not None:
                 for col in check_vj_mapping:
-                    adata = adata[
-                        ~(
-                            adata.obs[
-                                col + "_" + mode + "_VJ_main"
-                            ].str.contains(filter_pattern)
-                        )
-                    ].copy()
+                    adata = _filter_cells(
+                        adata=adata,
+                        col=col + "_" + mode + "_VJ_main",
+                        filter_pattern=filter_pattern,
+                        remove_missing=remove_missing,
+                    )
         else:
             if extract_cols is None:
                 if check_vdj_mapping is not None:
                     for col in check_vdj_mapping:
-                        adata = adata[
-                            ~(
-                                adata.obs[col + "_VDJ_main"].str.contains(
-                                    filter_pattern
-                                )
-                            )
-                        ].copy()
+                        adata = _filter_cells(
+                            adata=adata,
+                            col=col + "_VDJ_main",
+                            filter_pattern=filter_pattern,
+                            remove_missing=remove_missing,
+                        )
                 if check_vj_mapping is not None:
                     for col in check_vj_mapping:
-                        adata = adata[
-                            ~(
-                                adata.obs[col + "_VJ_main"].str.contains(
-                                    filter_pattern
-                                )
-                            )
-                        ].copy()
+                        adata = _filter_cells(
+                            adata=adata,
+                            col=col + "_VJ_main",
+                            filter_pattern=filter_pattern,
+                            remove_missing=remove_missing,
+                        )
             else:
                 if check_extract_cols_mapping is not None:
                     for col in check_extract_cols_mapping:
-                        adata = adata[
-                            ~(
-                                adata.obs[col + "_main"].str.contains(
-                                    filter_pattern
-                                )
-                            )
-                        ].copy()
+                        adata = _filter_cells(
+                            adata=adata,
+                            col=col + "_main",
+                            filter_pattern=filter_pattern,
+                            remove_missing=remove_missing,
+                        )
 
     return adata
 
