@@ -19,6 +19,10 @@ def _filter_cells(
     filter_pattern: Optional[str] = ",|None|No_contig",
     remove_missing: bool = True,
 ) -> AnnData:
+    """
+    Helper function that identifies filter_pattern hits in `.obs[col]` of adata, and then either removes the 
+    offending cells or masks the matched values with a uniform value of `col+"_missing"`.
+    """
     # find filter pattern hits in our column of interest
     mask = adata.obs[col].str.contains(filter_pattern)
     if remove_missing:
