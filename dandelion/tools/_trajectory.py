@@ -314,6 +314,7 @@ def vdj_pseudobulk(
     pbs: Optional[Union[np.ndarray, sp.sparse.csr_matrix]] = None,
     obs_to_bulk: Optional[Union[str, List[str]]] = None,
     obs_to_take: Optional[Union[str, List[str]]] = None,
+    normalise: bool = True,
     mode: Optional[Literal["B", "abT", "gdT"]] = "abT",
     extract_cols: Optional[List[str]] = [
         "v_call_abT_VDJ_main",
@@ -336,6 +337,8 @@ def vdj_pseudobulk(
         will be combined
     obs_to_take : Optional[Union[str, List[str]]], optional
         Optional obs column(s) to identify the most common value of for each pseudobulk.
+    normalise : bool, optional
+        If True, will scale the counts of each V(D)J gene group to 1 for each pseudobulk.
     mode : Optional[Literal["B", "abT", "gdT"]], optional
         Optional mode for extracting the V(D)J genes. If set as `None`, it will use e.g. `v_call_VDJ` instead of `v_call_abT_VDJ`.
         If `extract_cols` is provided, then this argument is ignored.
@@ -346,7 +349,7 @@ def vdj_pseudobulk(
     -------
     AnnData
         pb_adata, whereby each observation is a pseudobulk:\n
-        VDJ usage frequency stored in pb_adata.X\n
+        VDJ usage frequency/counts stored in pb_adata.X\n
         VDJ genes stored in pb_adata.var\n
         pseudobulk metadata stored in pb_adata.obs\n
         pseudobulk assignment (binary matrix with input cells as columns) stored in pb_adata.obsm['pbs']\n
@@ -390,14 +393,15 @@ def vdj_pseudobulk(
         vj_pb_count, index=np.arange(pbs.shape[1]), columns=vjs.columns
     )
 
-    # loop over V(D)J gene categories
-    for col in extract_cols:
-        # identify columns holding genes belonging to the category
-        # and then normalise the values to 1 for each pseudobulk
-        mask = np.isin(df.columns, np.unique(adata.obs[col]))
-        df.loc[:, mask] = df.loc[:, mask].div(
-            df.loc[:, mask].sum(axis=1), axis=0
-        )
+    if normalise:
+        # loop over V(D)J gene categories
+        for col in extract_cols:
+            # identify columns holding genes belonging to the category
+            # and then normalise the values to 1 for each pseudobulk
+            mask = np.isin(df.columns, np.unique(adata.obs[col]))
+            df.loc[:, mask] = df.loc[:, mask].div(
+                df.loc[:, mask].sum(axis=1), axis=0
+            )
 
     # create obs for the new pseudobulk object
     pbs_obs = _get_pbs_obs(pbs, obs_to_take, adata)
