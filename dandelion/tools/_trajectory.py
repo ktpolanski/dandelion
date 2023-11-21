@@ -315,6 +315,8 @@ def vdj_pseudobulk(
     obs_to_bulk: Optional[Union[str, List[str]]] = None,
     obs_to_take: Optional[Union[str, List[str]]] = None,
     normalise: bool = True,
+    renormalise: bool = False,
+    min_count: int = 1,
     mode: Optional[Literal["B", "abT", "gdT"]] = "abT",
     extract_cols: Optional[List[str]] = [
         "v_call_abT_VDJ_main",
@@ -339,6 +341,12 @@ def vdj_pseudobulk(
         Optional obs column(s) to identify the most common value of for each pseudobulk.
     normalise : bool, optional
         If True, will scale the counts of each V(D)J gene group to 1 for each pseudobulk.
+    renormalise : bool, optional
+        If True, will re-scale the counts of each V(D)J gene group to 1 for each pseudobulk with any "missing" calls removed.
+        Relevant with `normalise` as True, if `setup_vdj_pseudobulk()` was ran with `remove_missing` set to False.
+    min_count : int, optional
+        Pseudobulks with fewer than these many non-"missing" calls in a V(D)J gene group will have their non-"missing" calls
+        set to 0 for that group. Relevant with `normalise` as True.
     mode : Optional[Literal["B", "abT", "gdT"]], optional
         Optional mode for extracting the V(D)J genes. If set as `None`, it will use e.g. `v_call_VDJ` instead of `v_call_abT_VDJ`.
         If `extract_cols` is provided, then this argument is ignored.
@@ -394,14 +402,36 @@ def vdj_pseudobulk(
     )
 
     if normalise:
+        # identify any missing calls inserted by the setup, will end with _missing
+        # negate as we want to actually remove them later
+        defined_mask = ~(df.columns.str.endswith("_missing"))
         # loop over V(D)J gene categories
         for col in extract_cols:
             # identify columns holding genes belonging to the category
             # and then normalise the values to 1 for each pseudobulk
-            mask = np.isin(df.columns, np.unique(adata.obs[col]))
-            df.loc[:, mask] = df.loc[:, mask].div(
-                df.loc[:, mask].sum(axis=1), axis=0
+            group_mask = np.isin(df.columns, np.unique(adata.obs[col]))
+            # identify the defined (non-missing) calls for the group
+            group_defined_mask = group_mask & defined_mask
+            # compute sum of non-missing values for each pseudobulk for this category
+            # and compare to the min_count
+            defined_min_count = (
+                df.loc[:, group_defined_mask].sum(axis=1) >= min_count
             )
+            # we can now normalise for the pseudobulks, for now all the pseudobulks
+            df.loc[:, group_mask] = df.loc[:, group_mask].div(
+                df.loc[:, group_mask].sum(axis=1), axis=0
+            )
+            if renormalise:
+                # repeat the normalisation for non-missing values only
+                # and only use pseudobulks crossing the min_count threshold
+                df.loc[defined_min_count, group_defined_mask] = df.loc[
+                    defined_min_count, group_defined_mask
+                ].div(
+                    df.loc[defined_min_count, group_defined_mask].sum(axis=1),
+                    axis=0,
+                )
+            # we can now mask the pseudobulks with insufficient defined counts
+            df.loc[~defined_min_count, group_defined_mask] = 0
 
     # create obs for the new pseudobulk object
     pbs_obs = _get_pbs_obs(pbs, obs_to_take, adata)
